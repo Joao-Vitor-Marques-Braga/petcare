@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Company {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  phone     String?
+  plan      String   @default("PRO")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+
+  @@map("companies")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String   @default("PETSHOP_ADMIN") // SUPER_ADMIN | PETSHOP_ADMIN
+  companyId    String   @default("default")
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([companyId])
+  @@map("users")
+}
+
+model Customer {
+  id           String        @id @default(uuid())
+  companyId    String        @default("default")
+  name         String
+  phone        String
+  email        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  pets         Pet[]
+  appointments Appointment[]
+
+  @@index([companyId])
+  @@map("customers")
+}
+
+model Pet {
+  id           String        @id @default(uuid())
+  name         String
+  breed        String
+  size         String        // PEQUENO, MEDIO, GRANDE
+  customerId   String
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  appointments Appointment[]
+
+  @@map("pets")
+}
+
+model Appointment {
+  id               String             @id @default(uuid())
+  companyId        String             @default("default")
+  scheduledAt      DateTime
+  service          String             @default("BANHO")
+  serviceName      String?
+  servicePrice     Float?
+  status           String             @default("PENDENTE") // PENDENTE, MENSAGEM_ENVIADA, CONFIRMADO, CANCELADO_REAGENDAR
+  notes            String?
+  customerId       String
+  customer         Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  petId            String
+  pet              Pet                @relation(fields: [petId], references: [id], onDelete: Cascade)
+  lastReminderSent DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  logs             NotificationLog[]
+
+  @@index([companyId])
+  @@map("appointments")
+}
+
+model ServiceCatalog {
+  id              String   @id @default(uuid())
+  companyId       String   @default("default")
+  code            String
+  name            String
+  description     String?
+  price           Float    @default(0)
+  durationMinutes Int      @default(60)
+  category        String   @default("ESTETICA")
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@map("service_catalog")
+}
+
+model NotificationLog {
+  id            String       @id @default(uuid())
+  appointmentId String
+  appointment   Appointment  @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  channel       String       @default("WHATSAPP")
+  direction     String       // OUTBOUND | INBOUND
+  payload       String?
+  status        String       // SUCCESS | FAILED | RECEIVED
+  createdAt     DateTime     @default(now())
+
+  @@map("notification_logs")
+}
+
+model WhatsAppConfig {
+  id           String   @id @default("default")
+  apiUrl       String   @default("http://localhost:8080")
+  apiKey       String   @default("")
+  instanceName String   @default("petshop_bot")
+  senderPhone  String?  // Número do WhatsApp que envia
+  isMockMode   Boolean  @default(true)
+  updatedAt    DateTime @updatedAt
+
+  @@map("whatsapp_configs")
+}

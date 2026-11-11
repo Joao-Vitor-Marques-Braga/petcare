@@ -1,0 +1,107 @@
+services:
+  # ==========================================
+  # Banco de Dados Relacional PostgreSQL
+  # ==========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: petshop_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-petshop_antifuro}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - petshop_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-petshop_antifuro}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # Servidor WhatsApp Evolution API v2
+  # ==========================================
+  evolution-api:
+    image: evoapicloud/evolution-api:v2.3.7
+    container_name: petshop_evolution_api
+    restart: always
+    environment:
+      SERVER_TYPE: http
+      SERVER_PORT: 8080
+      SERVER_URL: http://localhost:8080
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:-429644463e69881710e69a3ac169490340}
+      CONFIG_SESSION_PHONE_CLIENT: PetCare Anti-Furo
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-petshop_antifuro}?schema=evolution
+      DATABASE_CONNECTION_CLIENT_NAME: evolution_api
+      CACHE_REDIS_ENABLED: "false"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - evolution_instances:/evolution/instances
+    networks:
+      - petshop_network
+
+  # ==========================================
+  # Backend API (Clean Architecture Node.js)
+  # ==========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: petshop_backend
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 3333
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-petshop_antifuro}?schema=public
+      MOCK_WHATSAPP_GATEWAY: ${MOCK_WHATSAPP_GATEWAY:-false}
+      EVOLUTION_API_URL: http://evolution-api:8080
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-429644463e69881710e69a3ac169490340}
+      EVOLUTION_INSTANCE_NAME: ${EVOLUTION_INSTANCE_NAME:-petshop_bot}
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-anti_furo_super_secret_token_2025}
+    ports:
+      - "3333:3333"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      evolution-api:
+        condition: service_started
+    networks:
+      - petshop_network
+
+  # ==========================================
+  # Frontend Dashboard (React + Tailwind + Nginx)
+  # ==========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: petshop_frontend
+    restart: always
+    ports:
+      - "80:80"
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - petshop_network
+
+volumes:
+  postgres_data:
+    driver: local
+  evolution_instances:
+    driver: local
+
+networks:
+  petshop_network:
+    driver: bridge
